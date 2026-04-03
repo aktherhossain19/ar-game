@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AR Target Shooter</title>
+
+<!-- AR.js + A-Frame -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
+<script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+<style>
+  /* ─── Reset & Base ─── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --neon-green:  #00ff88;
+    --neon-red:    #ff3366;
+    --neon-yellow: #ffdd00;
+    --neon-blue:   #00ccff;
+    --dark:        #080c10;
+    --panel-bg:    rgba(8, 12, 16, 0.88);
+    --font-mono:   'Share Tech Mono', monospace;
+    --font-display:'Orbitron', sans-serif;
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--dark);
+    font-family: var(--font-mono);
+    color: var(--neon-green);
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  /* ─── AR Scene ─── */
+  a-scene {
+    position: fixed !important;
+    top: 0; left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 0;
+  }
+
+  /* ─── HUD Overlay ─── */
+  #hud {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ─── Score Panel (top-left) ─── */
+  #score-panel {
+    position: absolute;
+    top: 16px; left: 16px;
+    background: var(--panel-bg);
+    border: 1px solid var(--neon-green);
+    border-radius: 4px;
+    padding: 10px 16px;
+    min-width: 160px;
+    box-shadow: 0 0 16px rgba(0,255,136,0.2), inset 0 0 20px rgba(0,255,136,0.04);
+  }
+  #score-panel::before {
+    content: 'SCORE';
+    display: block;
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: .2em;
+    color: rgba(0,255,136,0.5);
+    margin-bottom: 2px;
+  }
+  #score-display {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--neon-green);
+    text-shadow: 0 0 12px var(--neon-green);
+    line-height: 1;
+  }
+  #multiplier {
+    font-size: 11px;
+    color: var(--neon-yellow);
+    margin-top: 4px;
+    min-height: 14px;
+    transition: opacity .3s;
+  }
+
+  /* ─── Stats Panel (top-right) ─── */
+  #stats-panel {
+    position: absolute;
+    top: 16px; right: 16px;
+    background: var(--panel-bg);
+    border: 1px solid rgba(0,204,255,0.4);
+    border-radius: 4px;
+    padding: 10px 14px;
+    text-align: right;
+    box-shadow: 0 0 16px rgba(0,204,255,0.15);
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    font-size: 11px;
+    margin-bottom: 4px;
+    color: rgba(0,204,255,0.7);
+    letter-spacing: .05em;
+  }
+  .stat-val {
+    color: var(--neon-blue);
+    font-weight: bold;
+  }
+
+  /* ─── Timer Bar ─── */
+  #timer-wrap {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: rgba(255,255,255,0.08);
+  }
+  #timer-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--neon-green), var(--neon-yellow));
+    transition: width .5s linear, background .5s;
+    box-shadow: 0 0 6px var(--neon-green);
+  }
+  #timer-text {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--neon-yellow);
+    letter-spacing: .15em;
+    text-shadow: 0 0 8px var(--neon-yellow);
+  }
+
+  /* ─── Wave Badge ─── */
+  #wave-badge {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel-bg);
+    border: 1px solid var(--neon-yellow);
+    border-radius: 20px;
+    padding: 4px 18px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: .15em;
+    color: var(--neon-yellow);
+    text-shadow: 0 0 8px var(--neon-yellow);
+    white-space: nowrap;
+  }
+
+  /* ─── Queue Visualizer (bottom-left) ─── */
+  #queue-panel {
+    position: absolute;
+    bottom: 24px; left: 16px;
+    background: var(--panel-bg);
+    border: 1px solid rgba(0,255,136,0.3);
+    border-radius: 4px;
+    padding: 8px 12px;
+    min-width: 180px;
+  }
+  #queue-panel .panel-label {
+    font-size: 9px;
+    letter-spacing: .18em;
+    color: rgba(0,255,136,0.4);
+    margin-bottom: 6px;
+    font-family: var(--font-display);
+  }
+  #queue-vis {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .q-slot {
+    width: 22px; height: 22px;
+    border: 1px solid rgba(0,255,136,0.25);
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px;
+    transition: all .3s;
+    background: rgba(0,255,136,0.04);
+  }
+  .q-slot.filled {
+    border-color: var(--neon-green);
+    background: rgba(0,255,136,0.18);
+    box-shadow: 0 0 6px rgba(0,255,136,0.3);
+  }
+  .q-slot.hit { background: rgba(255,221,0,0.3); border-color: var(--neon-yellow); }
+  .q-slot.miss { background: rgba(255,51,102,0.3); border-color: var(--neon-red); }
+  #queue-arrow {
+    font-size: 10px;
+    color: rgba(0,255,136,0.4);
+    margin: 0 2px;
+  }
+
+  /* ─── Stack Visualizer (bottom-right) ─── */
+  #stack-panel {
+    position: absolute;
+    bottom: 24px; right: 16px;
+    background: var(--panel-bg);
+    border: 1px solid rgba(0,204,255,0.3);
+    border-radius: 4px;
+    padding: 8px 12px;
+    min-width: 150px;
+  }
+  #stack-panel .panel-label {
+    font-size: 9px;
+    letter-spacing: .18em;
+    color: rgba(0,204,255,0.4);
+    margin-bottom: 6px;
+    font-family: var(--font-display);
+    text-align: right;
+  }
+  #stack-vis {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 3px;
+    align-items: flex-end;
+  }
+  .s-entry {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: .04em;
+    transition: all .3s;
+    white-space: nowrap;
+  }
+  .s-entry.hit  { background: rgba(0,255,136,0.15); color: var(--neon-green);  border-left: 2px solid var(--neon-green);  }
+  .s-entry.miss { background: rgba(255,51,102,0.15); color: var(--neon-red);    border-left: 2px solid var(--neon-red);    }
+  .s-top-label {
+    font-size: 9px;
+    color: rgba(0,204,255,0.35);
+    text-align: right;
+    margin-bottom: 2px;
+    letter-spacing: .1em;
+  }
+
+  /* ─── Crosshair ─── */
+  #crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px; height: 44px;
+    pointer-events: none;
+  }
+  #crosshair::before,
+  #crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(0,255,136,0.7);
+  }
+  #crosshair::before { top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); }
+  #crosshair::after  { left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%); }
+  .ch-dot {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--neon-green);
+    box-shadow: 0 0 6px var(--neon-green);
+  }
+  #crosshair.flash { filter: drop-shadow(0 0 8px var(--neon-yellow)); }
+
+  /* ─── Hit Feedback ─── */
+  #hit-feedback {
+    position: absolute;
+    top: 42%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 900;
+    pointer-events: none;
+    opacity: 0;
+    text-shadow: 0 0 20px currentColor;
+    transition: none;
+    letter-spacing: .08em;
+  }
+  #hit-feedback.show-hit  { color: var(--neon-yellow); animation: feedbk .7s ease-out forwards; }
+  #hit-feedback.show-miss { color: var(--neon-red);    animation: feedbk .7s ease-out forwards; }
+  @keyframes feedbk {
+    0%   { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
+    60%  { opacity: .9; transform: translate(-50%, -60%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -70%) scale(.9); }
+  }
+
+  /* ─── Scan Line Effect ─── */
+  #scanlines {
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.07) 2px,
+      rgba(0,0,0,0.07) 4px
+    );
+    pointer-events: none;
+    z-index: 9;
+  }
+
+  /* ─── Marker Hint ─── */
+  #marker-hint {
+    position: absolute;
+    bottom: 50%; left: 50%;
+    transform: translate(-50%, 50%);
+    text-align: center;
+    padding: 20px;
+    transition: opacity .5s;
+  }
+  #marker-hint p {
+    font-size: 13px;
+    color: rgba(0,255,136,0.6);
+    letter-spacing: .08em;
+    line-height: 1.8;
+  }
+  .blink { animation: blink 1.2s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ─── Game Over Screen ─── */
+  #gameover {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,16,0.95);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100;
+    display: none;
+    gap: 16px;
+  }
+  #gameover h1 {
+    font-family: var(--font-display);
+    font-size: 42px;
+    font-weight: 900;
+    color: var(--neon-red);
+    text-shadow: 0 0 24px var(--neon-red);
+    letter-spacing: .1em;
+  }
+  .go-stat {
+    font-size: 13px;
+    color: rgba(0,255,136,0.7);
+    letter-spacing: .12em;
+    text-align: center;
+    line-height: 2;
+  }
+  .go-stat span { color: var(--neon-green); font-weight: bold; }
+  #restart-btn {
+    margin-top: 8px;
+    padding: 12px 36px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .2em;
+    color: var(--dark);
+    background: var(--neon-green);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(0,255,136,0.5);
+    transition: transform .15s, box-shadow .15s;
+  }
+  #restart-btn:hover { transform: scale(1.04); box-shadow: 0 0 30px rgba(0,255,136,0.7); }
+
+  /* ─── Start Screen ─── */
+  #startscreen {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,16,0.97);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 200;
+    gap: 12px;
+    text-align: center;
+    padding: 20px;
+  }
+  #startscreen h1 {
+    font-family: var(--font-display);
+    font-size: clamp(24px, 7vw, 48px);
+    font-weight: 900;
+    color: var(--neon-green);
+    text-shadow: 0 0 24px var(--neon-green);
+    letter-spacing: .12em;
+    line-height: 1.1;
+  }
+  #startscreen .subtitle {
+    font-size: 11px;
+    letter-spacing: .3em;
+    color: rgba(0,255,136,0.4);
+    margin-bottom: 8px;
+  }
+  .how-to {
+    background: rgba(0,255,136,0.05);
+    border: 1px solid rgba(0,255,136,0.15);
+    border-radius: 4px;
+    padding: 14px 20px;
+    font-size: 12px;
+    color: rgba(0,255,136,0.65);
+    line-height: 2;
+    letter-spacing: .06em;
+    max-width: 320px;
+    text-align: left;
+  }
+  .how-to b { color: var(--neon-green); }
+  #start-btn {
+    margin-top: 8px;
+    padding: 14px 44px;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .25em;
+    color: var(--dark);
+    background: var(--neon-green);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    box-shadow: 0 0 24px rgba(0,255,136,0.5);
+    animation: pulse-btn 2s ease-in-out infinite;
+  }
+  @keyframes pulse-btn {
+    0%,100% { box-shadow: 0 0 24px rgba(0,255,136,0.5); }
+    50%      { box-shadow: 0 0 40px rgba(0,255,136,0.8); }
+  }
+
+  /* DS explainer toggle */
+  #ds-toggle {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    letter-spacing: .12em;
+    color: rgba(0,255,136,0.35);
+    pointer-events: all;
+    cursor: pointer;
+    background: none; border: none;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  #ds-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,12,16,0.96);
+    z-index: 300;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  #ds-modal.open { display: flex; }
+  .ds-box {
+    border: 1px solid rgba(0,255,136,0.25);
+    border-radius: 6px;
+    padding: 20px 24px;
+    max-width: 480px;
+    width: 100%;
+  }
+  .ds-box h2 { font-family: var(--font-display); font-size: 14px; letter-spacing:.15em; color: var(--neon-green); margin-bottom: 16px; }
+  .ds-section { margin-bottom: 14px; }
+  .ds-section h3 { font-size: 11px; color: var(--neon-yellow); letter-spacing:.1em; margin-bottom: 6px; font-family: var(--font-display); }
+  .ds-section p  { font-size: 12px; color: rgba(0,255,136,0.65); line-height:1.8; letter-spacing:.03em; }
+  .ds-section code { background: rgba(0,255,136,0.1); padding: 1px 6px; border-radius: 2px; font-size: 11px; color: var(--neon-green); }
+  #close-ds { display:block; margin-top:16px; font-size:11px; color:rgba(0,255,136,.4); background:none; border:none; cursor:pointer; letter-spacing:.1em; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     START SCREEN
+════════════════════════════════════════════ -->
+<div id="startscreen">
+  <div class="subtitle">DATA STRUCTURES × AUGMENTED REALITY</div>
+  <h1>TARGET<br>SHOOTER</h1>
+  <div class="how-to">
+    <b>① Marker দেখাও</b> — Hiro marker প্রিন্ট করো বা স্ক্রিনে দেখাও<br>
+    <b>② Targets আসবে</b> — লাল/সোনালি বল pop up করবে<br>
+    <b>③ Tap করো</b> — Target এ tap/click করে shoot করো<br>
+    <b>④ Score বাড়াও</b> — Wave বাড়লে speed বাড়ে
+  </div>
+  <button id="start-btn" onclick="startGame()">START GAME</button>
+  <button id="ds-toggle" onclick="document.getElementById('ds-modal').classList.add('open')">
+    DS EXPLAINER — কীভাবে Queue & Stack ব্যবহার হচ্ছে?
+  </button>
+</div>
+
+<!-- DS Modal -->
+<div id="ds-modal">
+  <div class="ds-box">
+    <h2>DATA STRUCTURES IN THIS GAME</h2>
+    <div class="ds-section">
+      <h3>📦 QUEUE — Target Spawn System</h3>
+      <p>
+        প্রতিটা target spawn হওয়ার আগে একটা <code>spawnQueue</code> তে বসে। FIFO rule মেনে চলে — প্রথমে যে target queue এ ঢুকেছে, সেটা আগে spawn হয়।
+        <br><br>
+        Wave বাড়লে queue তে বেশি targets push হয়। <code>dequeue()</code> call হলে পরবর্তী target বের হয়ে AR scene এ add হয়। Bottom-left এ যে boxes দেখছো সেটা live queue visualization।
+      </p>
+    </div>
+    <div class="ds-section">
+      <h3>📚 STACK — Score History</h3>
+      <p>
+        প্রতিটা shot (hit বা miss) একটা <code>scoreStack</code> তে push হয়। LIFO — সবচেয়ে নতুন entry সবার উপরে।
+        <br><br>
+        Bottom-right panel এ stack এর top 5 entry দেখাচ্ছে। <code>peek()</code> দিয়ে last action check করা হয়, combo multiplier calculate করতে।
+      </p>
+    </div>
+    <button id="close-ds" onclick="document.getElementById('ds-modal').classList.remove('open')">✕ CLOSE</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     A-FRAME AR SCENE
+════════════════════════════════════════════ -->
+<a-scene
+  id="arscene"
+  embedded
+  arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+  renderer="logarithmicDepthBuffer: true; antialias: true;"
+  vr-mode-ui="enabled: false"
+  style="display:none"
+>
+  <a-assets>
+    <!-- Target material colours defined in JS -->
+  </a-assets>
+
+  <!-- Hiro Marker -->
+  <a-marker id="hiroMarker" preset="hiro" smooth="true" smoothCount="5">
+    <!-- Base platform (subtle grid) -->
+    <a-entity
+      geometry="primitive: plane; width: 1.4; height: 1.4"
+      material="color: #00ff88; opacity: 0.06; side: double"
+      rotation="-90 0 0"
+      position="0 0.001 0">
+    </a-entity>
+
+    <!-- Corner indicators -->
+    <a-entity id="corners"></a-entity>
+
+    <!-- Target container — JS will add targets here -->
+    <a-entity id="targetContainer"></a-entity>
+  </a-marker>
+
+  <a-entity camera></a-entity>
+</a-scene>
+
+<!-- ═══════════════════════════════════════════
+     HUD
+════════════════════════════════════════════ -->
+<div id="hud" style="display:none">
+  <!-- Timer bar -->
+  <div id="timer-wrap">
+    <div id="timer-bar" style="width:100%"></div>
+  </div>
+  <div id="timer-text">60</div>
+
+  <!-- Score -->
+  <div id="score-panel">
+    <div id="score-display">0</div>
+    <div id="multiplier"></div>
+  </div>
+
+  <!-- Wave badge -->
+  <div id="wave-badge">WAVE 1</div>
+
+  <!-- Stats -->
+  <div id="stats-panel">
+    <div class="stat-row"><span>HITS</span><span class="stat-val" id="stat-hits">0</span></div>
+    <div class="stat-row"><span>MISS</span><span class="stat-val" id="stat-miss">0</span></div>
+    <div class="stat-row"><span>ACC</span><span class="stat-val" id="stat-acc">--%</span></div>
+    <div class="stat-row"><span>BEST</span><span class="stat-val" id="stat-best">0</span></div>
+  </div>
+
+  <!-- Crosshair -->
+  <div id="crosshair"><div class="ch-dot"></div></div>
+
+  <!-- Hit feedback -->
+  <div id="hit-feedback"></div>
+
+  <!-- Queue Visualizer -->
+  <div id="queue-panel">
+    <div class="panel-label">SPAWN QUEUE</div>
+    <div id="queue-vis"></div>
+  </div>
+
+  <!-- Stack Visualizer -->
+  <div id="stack-panel">
+    <div class="panel-label">SCORE STACK</div>
+    <div class="s-top-label">TOP ↓</div>
+    <div id="stack-vis"></div>
+  </div>
+
+  <!-- Marker hint -->
+  <div id="marker-hint">
+    <p class="blink">▸ HIRO MARKER দেখাও<br>CAMERA এর সামনে</p>
+  </div>
+</div>
+
+<!-- Scanlines -->
+<div id="scanlines"></div>
+
+<!-- ═══════════════════════════════════════════
+     GAME OVER
+════════════════════════════════════════════ -->
+<div id="gameover">
+  <h1>GAME OVER</h1>
+  <div class="go-stat" id="go-stats"></div>
+  <button id="restart-btn" onclick="restartGame()">PLAY AGAIN</button>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     GAME LOGIC
+════════════════════════════════════════════ -->
+<script>
+/* ══════════════════════════════════════════
+   DATA STRUCTURES
+══════════════════════════════════════════ */
+
+// ── Queue (FIFO) ─── Target spawn order management
+class Queue {
+  constructor(maxSize = 8) {
+    this.items = [];
+    this.maxSize = maxSize;
+  }
+  enqueue(item) {
+    if (this.items.length < this.maxSize) {
+      this.items.push(item);
+      return true;
+    }
+    return false; // queue full
+  }
+  dequeue() {
+    return this.items.length ? this.items.shift() : null;
+  }
+  peek()    { return this.items[0] ?? null; }
+  isEmpty() { return this.items.length === 0; }
+  size()    { return this.items.length; }
+  toArray() { return [...this.items]; }
+}
+
+// ── Stack (LIFO) ─── Score history for combo tracking
+class Stack {
+  constructor(maxSize = 5) {
+    this.items = [];
+    this.maxSize = maxSize;
+  }
+  push(item) {
+    this.items.push(item);
+    if (this.items.length > this.maxSize) this.items.shift(); // keep only last N
+  }
+  pop()     { return this.items.pop() ?? null; }
+  peek()    { return this.items[this.items.length - 1] ?? null; }
+  isEmpty() { return this.items.length === 0; }
+  size()    { return this.items.length; }
+  toArray() { return [...this.items]; }
+  // Combo: count consecutive hits from top
+  comboCount() {
+    let count = 0;
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      if (this.items[i].type === 'hit') count++;
+      else break;
+    }
+    return count;
+  }
+}
+
+/* ══════════════════════════════════════════
+   GAME STATE
+══════════════════════════════════════════ */
+const G = {
+  // DS instances
+  spawnQueue : new Queue(8),
+  scoreStack : new Stack(5),
+
+  // Game vars
+  score      : 0,
+  bestScore  : parseInt(localStorage.getItem('arBest') || '0'),
+  hits       : 0,
+  misses     : 0,
+  wave       : 1,
+  timeLeft   : 60,
+  running    : false,
+  markerFound: false,
+
+  // Targets (active in scene)
+  activeTargets : [],
+  targetIdCounter: 0,
+
+  // Timers
+  gameTimer  : null,
+  spawnTimer : null,
+
+  // Wave config
+  get spawnInterval() { return Math.max(600, 1800 - (G.wave - 1) * 200); },
+  get targetLifetime() { return Math.max(1200, 2800 - (G.wave - 1) * 200); },
+  get targetsPerWave() { return 3 + G.wave; },
+};
+
+/* ══════════════════════════════════════════
+   TARGET TYPES
+══════════════════════════════════════════ */
+const TARGET_TYPES = [
+  { id: 'normal', color: '#ff3333', emissive: '#880000', points: 10, radius: 0.12, prob: 0.6 },
+  { id: 'fast',   color: '#ffaa00', emissive: '#553300', points: 25, radius: 0.09, prob: 0.25 },
+  { id: 'gold',   color: '#ffdd00', emissive: '#665500', points: 50, radius: 0.07, prob: 0.12 },
+  { id: 'bonus',  color: '#00ccff', emissive: '#003355', points: 100, radius: 0.06, prob: 0.03 },
+];
+
+function randomTargetType() {
+  const r = Math.random();
+  let cumulative = 0;
+  for (const t of TARGET_TYPES) {
+    cumulative += t.prob;
+    if (r < cumulative) return t;
+  }
+  return TARGET_TYPES[0];
+}
+
+/* ══════════════════════════════════════════
+   SPAWN QUEUE FILL
+   Fills queue with upcoming target configs
+══════════════════════════════════════════ */
+function fillSpawnQueue() {
+  const count = G.targetsPerWave;
+  for (let i = 0; i < count; i++) {
+    const type = randomTargetType();
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 0.3 + Math.random() * 0.3;
+    G.spawnQueue.enqueue({
+      id   : ++G.targetIdCounter,
+      type : type,
+      x    : Math.cos(angle) * radius,
+      y    : 0.08 + Math.random() * 0.25,
+      z    : Math.sin(angle) * radius,
+    });
+  }
+  updateQueueVis();
+}
+
+/* ══════════════════════════════════════════
+   SPAWN TARGET FROM QUEUE
+══════════════════════════════════════════ */
+function spawnNext() {
+  if (!G.running || !G.markerFound) return;
+
+  // Refill if empty
+  if (G.spawnQueue.isEmpty()) {
+    G.wave++;
+    document.getElementById('wave-badge').textContent = `WAVE ${G.wave}`;
+    showWaveAnim();
+    fillSpawnQueue();
+  }
+
+  const config = G.spawnQueue.dequeue(); // FIFO dequeue
+  if (!config) return;
+
+  updateQueueVis();
+  spawnTargetInScene(config);
+}
+
+/* ══════════════════════════════════════════
+   A-FRAME TARGET ENTITY
+══════════════════════════════════════════ */
+function spawnTargetInScene(config) {
+  const container = document.getElementById('targetContainer');
+  if (!container) return;
+
+  const entity = document.createElement('a-sphere');
+  entity.setAttribute('radius', config.type.radius);
+  entity.setAttribute('position', `${config.x} ${config.y} ${config.z}`);
+  entity.setAttribute('material', `color: ${config.type.color}; emissive: ${config.type.emissive}; emissiveIntensity: 0.6; metalness: 0.3; roughness: 0.4`);
+  entity.setAttribute('data-target-id', config.id);
+  entity.setAttribute('class', 'clickable');
+
+  // Pulse animation
+  entity.setAttribute('animation', `property: scale; to: 1.25 1.25 1.25; dur: 600; dir: alternate; loop: true; easing: easeInOutSine`);
+
+  // Click / tap handler
+  entity.addEventListener('click', () => onTargetHit(entity, config));
+
+  container.appendChild(entity);
+
+  // Track active
+  G.activeTargets.push({ id: config.id, entity, config, spawnTime: Date.now() });
+
+  // Auto-remove after lifetime
+  setTimeout(() => {
+    if (!entity.parentNode) return;
+    const idx = G.activeTargets.findIndex(t => t.id === config.id);
+    if (idx !== -1) {
+      onTargetMiss(entity, config);
+    }
+  }, G.targetLifetime);
+}
+
+/* ══════════════════════════════════════════
+   HIT HANDLER
+══════════════════════════════════════════ */
+function onTargetHit(entity, config) {
+  if (!G.running) return;
+  removeActiveTarget(config.id);
+
+  // Combo via stack
+  const combo = G.scoreStack.comboCount() + 1;
+  const points = config.type.points * combo;
+
+  // Push to score stack (LIFO)
+  G.scoreStack.push({ type: 'hit', points, label: `+${points}` });
+
+  G.score += points;
+  G.hits++;
+
+  // Explode animation before remove
+  entity.setAttribute('animation__out',
+    'property: scale; to: 2.5 2.5 2.5; dur: 180; easing: easeOutCubic');
+  entity.setAttribute('animation__fade',
+    'property: material.opacity; to: 0; dur: 180; easing: linear');
+  setTimeout(() => entity.parentNode && entity.parentNode.removeChild(entity), 200);
+
+  // Flash crosshair
+  flashCrosshair();
+  showHitFeedback(combo > 1 ? `${combo}x COMBO!` : `+${points}`, 'hit');
+  updateUI();
+  updateStackVis();
+}
+
+/* ══════════════════════════════════════════
+   MISS HANDLER
+══════════════════════════════════════════ */
+function onTargetMiss(entity, config) {
+  removeActiveTarget(config.id);
+
+  G.scoreStack.push({ type: 'miss', points: 0, label: 'MISS' });
+  G.misses++;
+
+  entity.setAttribute('animation__out',
+    'property: material.opacity; to: 0; dur: 350; easing: linear');
+  setTimeout(() => entity.parentNode && entity.parentNode.removeChild(entity), 380);
+
+  showHitFeedback('MISS', 'miss');
+  updateUI();
+  updateStackVis();
+}
+
+function removeActiveTarget(id) {
+  const idx = G.activeTargets.findIndex(t => t.id === id);
+  if (idx !== -1) G.activeTargets.splice(idx, 1);
+}
+
+/* ══════════════════════════════════════════
+   MARKER DETECTION
+══════════════════════════════════════════ */
+AFRAME.registerComponent('marker-handler', {
+  init() {
+    this.el.addEventListener('markerFound', () => {
+      G.markerFound = true;
+      document.getElementById('marker-hint').style.opacity = '0';
+    });
+    this.el.addEventListener('markerLost', () => {
+      G.markerFound = false;
+      document.getElementById('marker-hint').style.opacity = '1';
+    });
+  }
+});
+
+/* ══════════════════════════════════════════
+   GAME FLOW
+══════════════════════════════════════════ */
+function startGame() {
+  document.getElementById('startscreen').style.display = 'none';
+  document.getElementById('arscene').style.display = '';
+  document.getElementById('hud').style.display = '';
+
+  // Attach marker handler
+  const marker = document.getElementById('hiroMarker');
+  marker.setAttribute('marker-handler', '');
+
+  resetGameState();
+  G.running = true;
+
+  fillSpawnQueue();
+
+  // Game countdown
+  G.gameTimer = setInterval(() => {
+    G.timeLeft--;
+    updateTimerBar();
+    if (G.timeLeft <= 0) endGame();
+  }, 1000);
+
+  // Spawn loop
+  G.spawnTimer = setInterval(spawnNext, G.spawnInterval);
+}
+
+function resetGameState() {
+  G.score = 0; G.hits = 0; G.misses = 0;
+  G.wave = 1; G.timeLeft = 60;
+  G.spawnQueue = new Queue(8);
+  G.scoreStack = new Stack(5);
+  G.activeTargets = [];
+  G.targetIdCounter = 0;
+  document.getElementById('wave-badge').textContent = 'WAVE 1';
+  updateUI(); updateQueueVis(); updateStackVis();
+}
+
+function endGame() {
+  G.running = false;
+  clearInterval(G.gameTimer);
+  clearInterval(G.spawnTimer);
+
+  // Clear scene targets
+  G.activeTargets.forEach(t => t.entity.parentNode && t.entity.parentNode.removeChild(t.entity));
+  G.activeTargets = [];
+
+  if (G.score > G.bestScore) {
+    G.bestScore = G.score;
+    localStorage.setItem('arBest', G.bestScore);
+  }
+
+  const acc = G.hits + G.misses > 0
+    ? Math.round((G.hits / (G.hits + G.misses)) * 100) : 0;
+
+  document.getElementById('go-stats').innerHTML =
+    `SCORE  <span>${G.score}</span><br>` +
+    `BEST   <span>${G.bestScore}</span><br>` +
+    `HITS   <span>${G.hits}</span>  ·  MISS <span>${G.misses}</span><br>` +
+    `ACCURACY  <span>${acc}%</span><br>` +
+    `WAVES  <span>${G.wave}</span>`;
+
+  document.getElementById('gameover').style.display = 'flex';
+}
+
+function restartGame() {
+  document.getElementById('gameover').style.display = 'none';
+  clearInterval(G.gameTimer);
+  clearInterval(G.spawnTimer);
+  resetGameState();
+  G.running = true;
+  fillSpawnQueue();
+  G.gameTimer = setInterval(() => {
+    G.timeLeft--;
+    updateTimerBar();
+    if (G.timeLeft <= 0) endGame();
+  }, 1000);
+  G.spawnTimer = setInterval(spawnNext, G.spawnInterval);
+}
+
+/* ══════════════════════════════════════════
+   UI UPDATES
+══════════════════════════════════════════ */
+function updateUI() {
+  document.getElementById('score-display').textContent = G.score;
+
+  const combo = G.scoreStack.comboCount();
+  const mEl = document.getElementById('multiplier');
+  if (combo >= 2) {
+    mEl.textContent = `${combo}x COMBO STREAK`;
+    mEl.style.opacity = 1;
+  } else {
+    mEl.textContent = '';
+  }
+
+  document.getElementById('stat-hits').textContent = G.hits;
+  document.getElementById('stat-miss').textContent = G.misses;
+  const total = G.hits + G.misses;
+  document.getElementById('stat-acc').textContent =
+    total ? Math.round(G.hits / total * 100) + '%' : '--%';
+  document.getElementById('stat-best').textContent = Math.max(G.score, G.bestScore);
+}
+
+function updateTimerBar() {
+  const pct = (G.timeLeft / 60) * 100;
+  const bar = document.getElementById('timer-bar');
+  bar.style.width = pct + '%';
+  if (pct < 30) bar.style.background = 'linear-gradient(90deg, #ff3366, #ff6600)';
+  else if (pct < 60) bar.style.background = 'linear-gradient(90deg, #ffdd00, #ff9900)';
+  document.getElementById('timer-text').textContent = G.timeLeft;
+}
+
+/* ─── Queue Visualizer ─── */
+function updateQueueVis() {
+  const vis = document.getElementById('queue-vis');
+  vis.innerHTML = '';
+  const arr = G.spawnQueue.toArray();
+  const MAX_SHOW = 8;
+  for (let i = 0; i < MAX_SHOW; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'q-slot' + (i < arr.length ? ' filled' : '');
+    if (i < arr.length) {
+      const colors = { normal: '🔴', fast: '🟠', gold: '🟡', bonus: '🔵' };
+      slot.textContent = colors[arr[i].type.id] || '●';
+    }
+    vis.appendChild(slot);
+  }
+}
+
+/* ─── Stack Visualizer ─── */
+function updateStackVis() {
+  const vis = document.getElementById('stack-vis');
+  vis.innerHTML = '';
+  const arr = G.scoreStack.toArray();
+  arr.forEach(entry => {
+    const el = document.createElement('div');
+    el.className = 's-entry ' + entry.type;
+    el.textContent = entry.label;
+    vis.appendChild(el);
+  });
+}
+
+/* ─── Hit Feedback ─── */
+function showHitFeedback(text, type) {
+  const el = document.getElementById('hit-feedback');
+  el.className = '';
+  void el.offsetWidth; // reflow to restart animation
+  el.textContent = text;
+  el.className = 'show-' + type;
+}
+
+/* ─── Crosshair flash ─── */
+function flashCrosshair() {
+  const ch = document.getElementById('crosshair');
+  ch.classList.add('flash');
+  setTimeout(() => ch.classList.remove('flash'), 250);
+}
+
+/* ─── Wave announce ─── */
+function showWaveAnim() {
+  const badge = document.getElementById('wave-badge');
+  badge.style.transform = 'translateX(-50%) scale(1.4)';
+  badge.style.color = '#ffdd00';
+  setTimeout(() => {
+    badge.style.transform = 'translateX(-50%) scale(1)';
+    badge.style.color = '';
+  }, 600);
+}
+
+/* ══════════════════════════════════════════
+   CLICK-TO-SHOOT (desktop + mobile raycasting)
+══════════════════════════════════════════ */
+document.addEventListener('click', e => {
+  if (!G.running || !G.markerFound) return;
+  // A-Frame handles click on entities natively via cursor component
+  // This handles misses (clicked background)
+  if (e.target.tagName !== 'CANVAS') return;
+  // Don't double-count if a-frame entity was clicked
+});
+
+// Ensure a-frame cursor is set up for touch
+document.querySelector('a-scene').setAttribute('cursor',
+  'rayOrigin: mouse; fuse: false');
+</script>
+</body>
+</html>
